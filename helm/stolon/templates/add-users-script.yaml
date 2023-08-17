@@ -1,0 +1,41 @@
+{{- if .Values.stolon.additionalUsers }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "stolon.configMapScripts" . }}
+  labels:
+    {{- include "stolon.labels" . | nindent 4 }}
+data:
+  users.sh: |
+    #!/bin/bash
+    set -eo pipefail
+
+    gen_psql() {
+      local name=$1
+      local password=$2
+      local perm=$3
+
+      echo "do
+      \$\$
+      begin
+        IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${name}') then
+          ALTER USER ${name} WITH PASSWORD '${password}';
+        ELSE
+          CREATE ROLE ${name} WITH ${perm} PASSWORD '${password}';
+        END IF;
+      end
+      \$\$;"
+    }
+
+    {{- range .Values.stolon.additionalUsers }}
+    ###
+    echo TRY CREATE USER {{ .name }} IF NOT EXISTS
+    secret_file="{{ $.Values.stolon.secretsPath }}/user-{{ .name }}"
+
+    until gen_psql "{{ .name }}" "$(cat $secret_file)" "{{ .permissions }}" | psql; do
+      echo "WAIT USER {{ .name }} CREATION"
+      sleep 5
+    done
+
+    {{- end }}
+{{- end }}

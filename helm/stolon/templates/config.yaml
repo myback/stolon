@@ -1,0 +1,23 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: {{ include "stolon.fullname" . }}
+  labels:
+    {{- include "stolon.labels" . | nindent 4 }}
+data:
+  STOLONCTL_CLUSTER_NAME: {{ include "stolon.clusterName" . }}
+  STKEEPER_CLUSTER_NAME: {{ include "stolon.clusterName" . }}
+  STPROXY_CLUSTER_NAME: {{ include "stolon.clusterName" . }}
+  STSENTINEL_CLUSTER_NAME: {{ include "stolon.clusterName" . }}
+  STOLONCTL_STORE_BACKEND: {{ .Values.stolon.storeBackend }}
+  STKEEPER_STORE_BACKEND: {{ .Values.stolon.storeBackend }}
+  STPROXY_STORE_BACKEND: {{ .Values.stolon.storeBackend }}
+  STSENTINEL_STORE_BACKEND: {{ .Values.stolon.storeBackend }}
+  STOLONCTL_KUBE_RESOURCE_KIND: {{ .Values.stolon.kubeResourceKind }}
+  STKEEPER_KUBE_RESOURCE_KIND: {{ .Values.stolon.kubeResourceKind }}
+  STPROXY_KUBE_RESOURCE_KIND: {{ .Values.stolon.kubeResourceKind }}
+  STSENTINEL_KUBE_RESOURCE_KIND: {{ .Values.stolon.kubeResourceKind }}
+  PGHOST: {{ include "stolon.proxyName" . }}
+  PGPORT: {{ .Values.proxy.service.port | quote }}
+  PGDATABASE: postgres
+  PGUSER: stolon

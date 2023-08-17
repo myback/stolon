@@ -1,0 +1,173 @@
+{{- $volumeDataName := print .Release.Name "-data" -}}
+{{- $stolonImage := include "stolon.image" (dict "image" .Values.stolon.image "global" .Values.global) -}}
+{{- $rootConfiguredPasswordFile := print .Values.stolon.secretsPath "/password" -}}
+{{- $replConfiguredPasswordFile := print .Values.stolon.secretsPath "/replpassword" -}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "stolon.keeperName" . }}
+  labels:
+    component: stolon-keeper
+    {{- include "stolon.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "stolon.keeperName" . }}
+  replicas: {{ .Values.keeper.replicaCount }}
+  selector:
+    matchLabels:
+      ## do not change! See https://github.com/sorintlab/stolon/blob/3bb7499f815f77140551eb762b200cf4557f57d3/internal/store/k8s.go#L69
+      component: stolon-keeper
+      stolon-cluster: {{ include "stolon.clusterName" . }}
+  template:
+    metadata:
+      {{- with .Values.keeper.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        component: stolon-keeper
+        stolon-cluster: {{ include "stolon.clusterName" . }}
+    spec:
+      {{- include "stolon.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "stolon.serviceAccountName" . }}
+      {{- with .Values.stolon.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: keeper
+          securityContext:
+            {{- toYaml .Values.stolon.securityContext | nindent 12 }}
+          image: {{ $stolonImage }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -ce
+            - |
+              _id="${HOSTNAME##*-}"
+              _cmd="/usr/local/bin/stolon-keeper"
+              if [ $(id -u) -eq 0 ]; then
+                  _cmd="/usr/local/bin/gosu stolon ${_cmd}"
+              fi
+
+              if [ "${_id}" -eq 0 ] && [ ! -d "{{ .Values.keeper.persistence.path }}/postgres/base" ]; then
+                  stolonctl init -y --log-level=debug
+                  stolonctl update -p -f <(echo '{{ .Values.stolon.config | toJson }}')
+              fi
+
+              ${_cmd} --uid "${_id}" {{ with .Values.keeper.logLevel }}--log-level {{ . }}{{ end }}
+          env:
+            - name: STKEEPER_PG_LISTEN_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CHECKSUM
+              value: {{ print .Values.stolon.replicationPassword .Values.stolon.postgresPassword | sha256sum }}
+            - name: STKEEPER_PG_SU_PASSWORDFILE
+              value: {{ $rootConfiguredPasswordFile }}
+            - name: STKEEPER_PG_REPL_PASSWORDFILE
+              value: {{ $replConfiguredPasswordFile }}
+            - name: STKEEPER_PG_REPL_USERNAME
+              value: {{ .Values.stolon.replicationUser }}
+            - name: STKEEPER_PG_SU_USERNAME
+              value: {{ .Values.stolon.postgresUser }}
+            - name: STKEEPER_DATA_DIR
+              value: {{ .Values.keeper.persistence.path }}
+            - name: STKEEPER_METRICS_LISTEN_ADDRESS
+              value: 0.0.0.0:8080
+          envFrom:
+            - configMapRef:
+                name: {{ include "stolon.fullname" . }}
+          ports:
+            - name: postgres
+              containerPort: {{ .Values.keeper.service.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.keeper.monitoring.port }}
+              protocol: TCP
+          {{- with .Values.keeper.livenessProbe }}
+          livenessProbe:
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.keeper.readinessProbe }}
+          readinessProbe:
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.keeper.startupProbe }}
+          startupProbe:
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.keeper.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - mountPath: /dev/shm
+              name: shm-volume
+            - name: {{ $volumeDataName }}
+              mountPath: {{ .Values.keeper.persistence.path }}
+            - name: secrets
+              mountPath: {{ .Values.stolon.secretsPath }}/password
+              subPath: password
+              readOnly: true
+            - name: secrets
+              mountPath: {{ .Values.stolon.secretsPath }}/replpassword
+              subPath: replpassword
+              readOnly: true
+      enableServiceLinks: {{ .Values.enableServiceLinks }}
+      {{- with .Values.keeper.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.keeper.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.keeper.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: shm-volume
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.keeper.sharedMemorySize }}
+        - name: secrets
+          secret:
+            secretName: {{ include "stolon.fullname" . }}
+            defaultMode: 0400
+  {{- if not .Values.keeper.persistence.enabled }}
+        - name: {{ $volumeDataName }}
+          emptyDir: {}
+  {{- else }}
+  {{- if .Values.keeper.persistence.existingClaim }}
+        - name: {{ $volumeDataName }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.keeper.persistence.existingClaim }}
+  {{- else }}
+  volumeClaimTemplates:
+    - metadata:
+        labels:
+          app.kubernetes.io/instance: {{ .Release.Name }}
+          component: stolon-keeper
+        name: {{ $volumeDataName }}
+        {{- with .Values.keeper.persistence.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- toYaml .Values.keeper.persistence.accessModes | nindent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.keeper.persistence.size }}
+        {{- with .Values.keeper.persistence.selector }}
+        selector:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{ include "stolon.storage.class" (dict "persistence" .Values.keeper.persistence "global" .Values.global) }}
+  {{- end }}
+  {{- end }}

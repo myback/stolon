@@ -1,0 +1,71 @@
+{{- $stolonImage := include "stolon.image" (dict "image" .Values.stolon.image "global" .Values.global) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "stolon.fullname" . }}-proxy
+  labels:
+    component: stolon-proxy
+    {{- include "stolon.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.proxy.replicaCount }}
+  selector:
+    matchLabels:
+      component: stolon-proxy
+      stolon-cluster: {{ include "stolon.clusterName" . }}
+  template:
+    metadata:
+      {{- with .Values.proxy.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        ## do not change! See https://github.com/sorintlab/stolon/blob/3bb7499f815f77140551eb762b200cf4557f57d3/internal/store/k8s.go#L69
+        component: stolon-proxy
+        stolon-cluster: {{ include "stolon.clusterName" . }}
+    spec:
+      {{- include "stolon.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "stolon.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.stolon.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}-proxy
+          securityContext:
+            {{- toYaml .Values.stolon.securityContext | nindent 12 }}
+          image: {{ $stolonImage }}
+          imagePullPolicy: {{ .Values.stolon.image.pullPolicy }}
+          command:
+            - /usr/local/bin/stolon-proxy
+          ports:
+            - name: postgres
+              containerPort: {{ .Values.proxy.service.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: STPROXY_METRICS_LISTEN_ADDRESS
+              value: 0.0.0.0:8080
+            - name: STPROXY_LISTEN_ADDRESS
+              value: "0.0.0.0"
+          envFrom:
+            - configMapRef:
+                name: {{ include "stolon.fullname" . }}
+          resources:
+            {{- toYaml .Values.proxy.resources | nindent 12 }}
+      enableServiceLinks: {{ .Values.enableServiceLinks }}
+      {{- with .Values.proxy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.proxy.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

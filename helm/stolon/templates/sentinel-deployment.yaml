@@ -1,0 +1,66 @@
+{{- $stolonImage := include "stolon.image" (dict "image" .Values.stolon.image "global" .Values.global) -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "stolon.sentinelName" . }}
+  labels:
+    component: stolon-sentinel
+    {{- include "stolon.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.sentinel.replicaCount }}
+  selector:
+    matchLabels:
+      component: stolon-sentinel
+      stolon-cluster: {{ include "stolon.clusterName" . }}
+  template:
+    metadata:
+      {{- with .Values.sentinel.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        ## do not change! See https://github.com/sorintlab/stolon/blob/3bb7499f815f77140551eb762b200cf4557f57d3/internal/store/k8s.go#L69
+        component: stolon-sentinel
+        stolon-cluster: {{ include "stolon.clusterName" . }}
+    spec:
+      {{- include "stolon.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "stolon.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.stolon.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}-sentinel
+          securityContext:
+            {{- toYaml .Values.stolon.securityContext | nindent 12 }}
+          image: {{ $stolonImage }}
+          imagePullPolicy: {{ .Values.stolon.image.pullPolicy }}
+          command:
+            - /usr/local/bin/stolon-sentinel
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: STSENTINEL_METRICS_LISTEN_ADDRESS
+              value: "0.0.0.0:8080"
+          envFrom:
+            - configMapRef:
+                name: {{ include "stolon.fullname" . }}
+          resources:
+            {{- toYaml .Values.sentinel.resources | nindent 12 }}
+      enableServiceLinks: {{ .Values.enableServiceLinks }}
+      {{- with .Values.sentinel.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sentinel.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.sentinel.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

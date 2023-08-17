@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "stolon.keeperName" . }}
+  labels:
+    component: stolon-keeper
+    {{- include "stolon.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.keeper.service.type }}
+  ports:
+    - port: {{ .Values.keeper.service.port }}
+      targetPort: postgres
+      protocol: TCP
+      name: postgres
+    - port: {{ .Values.keeper.monitoring.port }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    component: stolon-keeper
+    stolon-cluster: {{ include "stolon.clusterName" . }}

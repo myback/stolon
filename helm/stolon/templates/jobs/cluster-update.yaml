@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "stolon.fullname" . }}-update-cluster
+  labels:
+    {{- include "stolon.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        component: {{ .Release.Name }}-update-cluster
+        stolon-cluster: {{ include "stolon.clusterName" . }}
+    spec:
+      {{- include "stolon.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "stolon.serviceAccountName" . }}
+      restartPolicy: OnFailure
+      {{- with .Values.stolon.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: cluster-update
+          securityContext:
+            {{- toYaml .Values.stolon.securityContext | nindent 12 }}
+          image: {{ include "stolon.image" (dict "image" .Values.stolon.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.stolon.image.pullPolicy }}
+          command:
+            - stolonctl
+            - update
+            - -p
+            - '{{ .Values.stolon.config | toJson }}'
+          envFrom:
+            - configMapRef:
+                name: {{ include "stolon.fullname" . }}
+          {{- with .Values.initJobs.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

@@ -1,0 +1,213 @@
+nameOverride: ""
+fullnameOverride: ""
+
+global:
+  imageRegistry: ""
+  ## E.g.
+  ## imagePullSecrets:
+  ##   - myRegistryKeySecretName
+  ##
+  imagePullSecrets: []
+  storageClass: ""
+
+serviceAccount:
+  ## Specifies whether a service account should be created
+  create: false
+  ## Annotations to add to the service account
+  annotations: {}
+  ## The name of the service account to use.
+  ## If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+rbac:
+  create: false
+
+initJobs:
+  resources: {}
+
+enableServiceLinks: false
+
+stolon:
+  image:
+    registry: ""
+    repository: mybackspace/stolon
+    tag: master-pg14
+
+    ## Specify a imagePullPolicy
+    ## Defaults to 'Always' if image tag is 'latest', else set to 'IfNotPresent'
+    ## ref: http://kubernetes.io/docs/user-guide/images/#pre-pulling-images
+    ##
+    pullPolicy: Always
+    ## Optionally specify an array of imagePullSecrets.
+    ## Secrets must be manually created in the namespace.
+    ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+    ## Example:
+    ## pullSecrets:
+    ##   - myRegistryKeySecretName
+    ##
+    pullSecrets: []
+
+  secretsPath: /stolon/secrets
+  scriptsPath: /stolon/scripts
+
+  additionalUsers: {}
+
+  postgresUser: stolon
+  postgresPassword: ""  # system superuser password. if empty, will be generated random password (30 symbols)
+
+  replicationUser: repluser
+  replicationPassword: "" # system replication user password. if empty, will be generated random password (30 symbols)
+
+  storeBackend: kubernetes
+  kubeResourceKind: configmap
+
+  ## generate Stolon JSON config
+  ## full reference in https://github.com/sorintlab/stolon/blob/master/doc/cluster_spec.md
+  ## config apply after keeper restart
+  config:
+    automaticPgRestart: false
+    ## most PostgreSQL parameters maps as pgParameters
+    ## use official docs for understanding them: https://www.postgresql.org/docs/14/config-setting.html
+    pgParameters: {}
+      #wal_level: logical
+
+  podSecurityContext:
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+
+  securityContext:
+    capabilities:
+      drop:
+      - ALL
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+
+keeper:
+  replicaCount: 1
+
+  ## debug, info, warn or error (default "info")
+  logLevel: info
+
+  service:
+    type: ClusterIP
+    port: 5432
+
+  monitoring:
+    port: 8080
+
+  sharedMemorySize: 256Mi
+
+  ## Persistence parameters
+  ## ref: http://kubernetes.io/docs/user-guide/persistent-volumes/
+  ##
+  persistence:
+    ## @param persistence.enabled Enable persistence on Verdaccio using Persistent Volume Claims
+    ##
+    enabled: true
+    ## @param persistence.path The path the volume will be mounted at on Verdaccio containers
+    ## NOTE: Useful when using different Verdaccio images
+    ##
+    path: /stolon/data
+    ## @param persistence.storageClass Persistent Volume storage class
+    ## If defined, storageClassName: <storageClass>
+    ## If set to "-", storageClassName: "", which disables dynamic provisioning
+    ## If undefined (the default) or set to null, no storageClassName spec is set, choosing the default provisioner
+    ##
+    storageClass:
+    ## @param persistence.accessModes [array] Persistent Volume access modes
+    ##
+    accessModes:
+      - ReadWriteOnce
+    ## @param persistence.size Persistent Volume size
+    ##
+    size: 8Gi
+    ## @param persistence.annotations Additional custom annotations for the PVC
+    ##
+    annotations: {}
+    ## @param persistence.selector Additional labels to match for the PVC
+    ## e.g:
+    ## selector:
+    ##   matchLabels:
+    ##     app: my-app
+    ##
+    selector: {}
+    ## @param persistence.existingClaim Use a existing PVC which must be created manually before bound
+    ## NOTE: requires persistence.enabled: true
+    ##
+    existingClaim:
+
+  resources: {}
+    ## We usually recommend not to specify default resources and to leave this as a conscious
+    ## choice for the user. This also increases chances charts run on environments with little
+    ## resources, such as Minikube. If you do want to specify resources, uncomment the following
+    ## lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+
+  initResources:
+    limits:
+      cpu: 10m
+      memory: 32Mi
+    requests:
+      cpu: 10m
+      memory: 32Mi
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+  podAnnotations: {}
+
+  livenessProbe:
+    periodSeconds: 10
+    failureThreshold: 2
+    timeoutSeconds: 3
+    exec:
+      command:
+        - /checks.sh
+        - livenessProbe
+
+proxy:
+  replicaCount: 1
+
+  service:
+    name: ""
+    type: ClusterIP
+    port: 5432
+
+  monitoring:
+    port: 8080
+
+  resources: {}
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+  podAnnotations: {}
+
+sentinel:
+  replicaCount: 1
+
+  monitoring:
+    port: 8080
+
+  resources: {}
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  affinity: {}
+
+  podAnnotations: {}

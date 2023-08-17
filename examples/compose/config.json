@@ -1,0 +1,5 @@
+{ "automaticPgRestart": false,
+  "pgParameters" : {
+    "shared_buffers": "256MB"
+  }
+}

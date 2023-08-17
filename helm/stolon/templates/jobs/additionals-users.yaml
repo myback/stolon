@@ -1,0 +1,62 @@
+{{- if .Values.stolon.additionalUsers }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "stolon.fullname" . }}-create-users
+  labels:
+    {{- include "stolon.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        component: {{ .Release.Name }}-create-user
+        stolon-cluster: {{ include "stolon.clusterName" . }}
+    spec:
+      {{- include "stolon.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "stolon.serviceAccountName" . }}
+      restartPolicy: Never
+      {{- with .Values.stolon.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: stolon-additionals
+          securityContext:
+            {{- toYaml .Values.stolon.securityContext | nindent 12 }}
+          image: {{ include "stolon.image" (dict "image" .Values.stolon.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.stolon.image.pullPolicy }}
+          command:
+            - {{ .Values.stolon.scriptsPath }}/users.sh
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "stolon.fullname" . }}
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: {{ include "stolon.fullname" . }}
+          volumeMounts:
+            - name: secrets
+              mountPath: {{ .Values.stolon.secretsPath }}
+              readOnly: true
+            - name: scripts
+              mountPath: {{ .Values.stolon.scriptsPath }}
+          {{- with .Values.initJobs.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: secrets
+          secret:
+            secretName: {{ include "stolon.fullname" . }}
+            defaultMode: 0400
+        - name: scripts
+          configMap:
+            name: {{ include "stolon.configMapScripts" . }}
+            defaultMode: 0750
+{{- end }}

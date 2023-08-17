@@ -1,0 +1,62 @@
+{{- $secret := lookup "v1" "Secret" .Release.Namespace (include "stolon.fullname" .) -}}
+{{- if $secret -}}
+{{- $stolonPassword := $secret.data.password | b64dec -}}
+{{- $replPassword := $secret.data.replpassword | b64dec -}}
+{{- if or (ne $stolonPassword .Values.stolon.postgresPassword) (ne $replPassword .Values.stolon.replicationPassword) -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "stolon.fullname" . }}-upgrade-root-users
+  labels:
+    {{- include "stolon.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+spec:
+  ttlSecondsAfterFinished: 60
+  template:
+    metadata:
+      labels:
+        component: {{ .Release.Name }}-upgrade-root-users
+        stolon-cluster: {{ include "stolon.clusterName" . }}
+    spec:
+      {{- include "stolon.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "stolon.serviceAccountName" . }}
+      restartPolicy: Never
+      {{- with .Values.stolon.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: upgrade-root-pg-users
+          securityContext:
+            {{- toYaml .Values.stolon.securityContext | nindent 12 }}
+          image: {{ include "stolon.image" (dict "image" .Values.stolon.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.stolon.image.pullPolicy }}
+          command:
+            - bash
+            - -ce
+            - |
+              until psql -c 'SELECT 1'; do
+                echo "wait stolon proxy ..."
+                sleep 3
+              done
+
+              psql -c "ALTER USER {{ .Values.stolon.replicationUser }} WITH PASSWORD '{{ .Values.stolon.replicationPassword }}'"
+              psql -c "ALTER USER {{ .Values.stolon.postgresUser }} WITH PASSWORD '{{ .Values.stolon.postgresPassword }}'"
+
+              sleep 10
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "stolon.fullname" . }}
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: {{ include "stolon.fullname" . }}
+          {{- with .Values.initJobs.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
+{{- end }}

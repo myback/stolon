@@ -1,0 +1,6 @@
+Service: {{ .Release.Name }}
+Image: {{  include "stolon.image" (dict "image" .Values.stolon.image "global" .Values.global) }}
+Internal Access:
+  - {{ include "stolon.proxyName" . }}.{{ .Release.Namespace }}:{{ .Values.keeper.service.port }} (postgres)
+  - {{ include "stolon.keeperName" . }}.{{ .Release.Namespace }}:{{ .Values.keeper.monitoring.port }} (metrics)
+  - {{ include "stolon.sentinelName" . }}.{{ .Release.Namespace }}:{{ .Values.sentinel.monitoring.port }} (metrics)

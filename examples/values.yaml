@@ -1,0 +1,16 @@
+serviceAccount:
+  create: true
+
+rbac:
+  create: true
+
+stolon:
+  additionalUsers:
+    admin:
+      name: admin
+      password: e3Qkh9sj8xKCojWxJ8Rdj5K1p3yNgcXq
+      permissions: SUPERUSER LOGIN
+
+  config:
+    pgParameters:
+      shared_buffers: 256MB
